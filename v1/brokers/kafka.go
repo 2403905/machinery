@@ -183,7 +183,7 @@ func (broker *KafkaBroker) GetPendingTasks(queue string) ([]*tasks.Signature, er
 		}
 		taskSignatures[i] = sig
 	}
-	
+
 	return taskSignatures, nil
 }
 
