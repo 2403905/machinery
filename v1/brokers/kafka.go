@@ -1,16 +1,18 @@
 package brokers
 
 import (
+	"encoding/json"
 	"github.com/RichardKnop/machinery/v1/log"
 	"github.com/RichardKnop/machinery/v1/tasks"
+	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
 	"sync"
-	"encoding/json"
 )
 
 type KafkaBroker struct {
 	Broker
 	consumer      *cluster.Consumer
+	producer      sarama.AsyncProducer
 	stopReceiving chan struct{}
 }
 
@@ -26,9 +28,18 @@ func NewKafkaBroker(kafkaTopics, kafkaBrokers []string, groupId string, offset i
 		return nil, err
 	}
 
+	saramaConfig := sarama.NewConfig()
+	config.Producer.Partitioner = sarama.NewRoundRobinPartitioner
+	producer, err := sarama.NewAsyncProducer(kafkaBrokers, saramaConfig)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &KafkaBroker{
 		consumer:      consumer,
 		stopReceiving: make(chan struct{}),
+		producer:      producer,
 	}, nil
 }
 
@@ -40,9 +51,21 @@ func (broker KafkaBroker) StartConsuming(consumerTag string, taskProcessor TaskP
 		for {
 			select {
 			case err := <-broker.consumer.Errors():
-				log.ERROR.Print(err)
+				log.ERROR.Printf("Consumer error: ", err)
 			case <-broker.stopReceiving:
 				return
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case err := <-broker.producer.Errors():
+				log.ERROR.Printf("Producer error: ", err)
+			case <-broker.stopReceiving:
+				return
+
 			}
 		}
 	}()
@@ -155,7 +178,9 @@ func (broker *KafkaBroker) consumeOne(delivery []byte, taskProcessor TaskProcess
 	// If the task is not registered, we requeue it,
 	// there might be different workers for processing specific tasks
 	if !broker.IsTaskRegistered(signature.Name) {
-		// TODO(stgleb): Add delivery back to queue
+		message := &sarama.ProducerMessage{Topic: broker.cnf.DefaultQueue, Value: sarama.ByteEncoder(delivery)}
+		broker.producer.Input() <- message
+
 		return nil
 	}
 
