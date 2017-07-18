@@ -2,17 +2,28 @@ package brokers
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/RichardKnop/machinery/v1/log"
 	"github.com/RichardKnop/machinery/v1/tasks"
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
 	"sync"
+	"time"
+	"github.com/satori/go.uuid"
+)
+
+var (
+	kafkaDelayedTasksKey = "delayed_tasks"
 )
 
 type KafkaBroker struct {
 	Broker
 	consumer      *cluster.Consumer
 	producer      sarama.AsyncProducer
+	kafkaTopics  []string
+	kafkaBrokers []string
+	groupId string
+	offset int64
 	stopReceiving chan struct{}
 }
 
@@ -40,6 +51,10 @@ func NewKafkaBroker(kafkaTopics, kafkaBrokers []string, groupId string, offset i
 		consumer:      consumer,
 		stopReceiving: make(chan struct{}),
 		producer:      producer,
+		kafkaBrokers: kafkaBrokers,
+		kafkaTopics: kafkaTopics,
+		groupId: groupId,
+		offset: offset,
 	}, nil
 }
 
@@ -109,12 +124,67 @@ func (broker *KafkaBroker) StopConsuming() {
 
 }
 
-func (broker *KafkaBroker) Publish(task *tasks.Signature) error {
+func (broker *KafkaBroker) Publish(signature *tasks.Signature) error {
+	msg, err := json.Marshal(signature)
+
+	if err != nil {
+		return fmt.Errorf("JSON marshal error: %s", err)
+	}
+
+	broker.AdjustRoutingKey(signature)
+
+	// Check the ETA signature field, if it is set and it is in the future,
+	// delay the task
+	// TODO(stgleb): Somehow prioritize tasks according to ETA.
+	if signature.ETA != nil {
+		now := time.Now().UTC()
+
+		if signature.ETA.After(now) {
+			message := &sarama.ProducerMessage{Topic: broker.cnf.DefaultQueue, Value: sarama.ByteEncoder(msg)}
+			broker.producer.Input() <- message
+
+			return err
+		}
+	}
+
+	// Send task by signature routing key in order.
+	message := &sarama.ProducerMessage{Topic: signature.RoutingKey, Value: sarama.ByteEncoder(msg)}
+	broker.producer.Input() <- message
+
 	return nil
 }
 
 func (broker *KafkaBroker) GetPendingTasks(queue string) ([]*tasks.Signature, error) {
-	return nil, nil
+	if queue == "" {
+		queue = broker.cnf.DefaultQueue
+	}
+
+	config := cluster.NewConfig()
+	config.Consumer.Return.Errors = true
+	config.Group.Return.Notifications = true
+	consumer, err := cluster.NewConsumer(broker.kafkaBrokers, uuid.NewV4().String(), broker.kafkaTopics, config)
+
+	if err != nil {
+		log.ERROR.Printf("Error while getting pending tasks: %s", err)
+	}
+
+	var messages [][]byte
+	queueLen := len(consumer.Messages())
+	for i := 0; i < queueLen; i++ {
+		msg := <- consumer.Messages()
+		messages = append(messages, msg.Value)
+	}
+
+	taskSignatures := make([]*tasks.Signature, len(messages))
+	for i, result := range messages {
+		sig := new(tasks.Signature)
+		if err := json.Unmarshal(result, sig); err != nil {
+			return nil, err
+		}
+		taskSignatures[i] = sig
+	}
+	
+	return taskSignatures, nil
 }
 
 func (broker *KafkaBroker) consume(deliveries <-chan []byte, taskProcessor TaskProcessor) error {
