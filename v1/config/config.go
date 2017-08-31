@@ -14,7 +14,6 @@ var (
 		DefaultQueue:       "machinery_tasks",
 		ResultBackend:      "amqp://guest:guest@localhost:5672/",
 		ResultsExpireIn:    3600,
-		MaxWorkerInstances: 3,
 		AMQP: &AMQPConfig{
 			Exchange:      "machinery_exchange",
 			ExchangeType:  "direct",
@@ -30,12 +29,11 @@ var (
 
 // Config holds all configuration for our program
 type Config struct {
-	Broker             string       `yaml:"broker" envconfig:"BROKER"`
-	DefaultQueue       string       `yaml:"default_queue" envconfig:"DEFAULT_QUEUE"`
-	ResultBackend      string       `yaml:"result_backend" envconfig:"RESULT_BACKEND"`
-	ResultsExpireIn    int          `yaml:"results_expire_in" envconfig:"RESULTS_EXPIRE_IN"`
-	MaxWorkerInstances int          `yaml:"max_worker_instances" envconfig:"MAX_WORKER_INSTANCES"`
-	AMQP               *AMQPConfig  `yaml:"amqp"`
+	Broker             string      `yaml:"broker" envconfig:"BROKER"`
+	DefaultQueue       string      `yaml:"default_queue" envconfig:"DEFAULT_QUEUE"`
+	ResultBackend      string      `yaml:"result_backend" envconfig:"RESULT_BACKEND"`
+	ResultsExpireIn    int         `yaml:"results_expire_in" envconfig:"RESULTS_EXPIRE_IN"`
+	AMQP               *AMQPConfig `yaml:"amqp"`
 	Kafka              *KafkaConfig `yaml:"kafka"`
 	TLSConfig          *tls.Config
 }
