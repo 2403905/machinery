@@ -48,6 +48,15 @@ func BrokerFactory(cnf *config.Config) (brokers.Interface, error) {
 		return brokers.NewRedisBroker(cnf, "", redisPassword, redisSocket, redisDB), nil
 	}
 
+	if strings.HasPrefix(cnf.Broker, "kafka://") {
+		servers, err := ParseKafkaURL(cnf.Broker)
+		if err != nil {
+			return nil, err
+		}
+
+		return brokers.NewKafkaBroker(cnf, servers), nil
+	}
+
 	if strings.HasPrefix(cnf.Broker, "eager") {
 		return brokers.NewEagerBroker(), nil
 	}
@@ -190,5 +199,21 @@ func ParseRedisSocketURL(url string) (path, password string, db int, err error) 
 		db, _ = strconv.Atoi(parts[1])
 	}
 
+	return
+}
+
+// ParseKafkaURL ... Example of valid url: kafka://host1[:port1][,host2[:port2],...[,hostN[:portN]]]
+func ParseKafkaURL(url string) (servers []string, err error) {
+	parts := strings.Split(url, "kafka://")
+	if parts[0] != "" {
+		err = errors.New("No kafka scheme found")
+		return
+	}
+	if len(parts) != 2 {
+		err = fmt.Errorf("Kafka connection string should be in format kafka://host1[:port1][,host2[:port2],...[,hostN[:portN]]], instead got %s", url)
+		return
+	}
+
+	servers = strings.Split(parts[1], ",")
 	return
 }

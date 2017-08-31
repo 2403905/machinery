@@ -3,13 +3,15 @@ package brokers
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/RichardKnop/machinery/v1/common"
+	"github.com/RichardKnop/machinery/v1/config"
 	"github.com/RichardKnop/machinery/v1/log"
 	"github.com/RichardKnop/machinery/v1/tasks"
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
+	"github.com/satori/go.uuid"
 	"sync"
 	"time"
-	"github.com/satori/go.uuid"
 )
 
 var (
@@ -18,101 +20,37 @@ var (
 
 type KafkaBroker struct {
 	Broker
-	consumer      *cluster.Consumer
-	producer      sarama.AsyncProducer
-	kafkaTopics  []string
+	common.KafkaConnector
 	kafkaBrokers []string
-	groupId string
-	offset int64
-	stopReceiving chan struct{}
 }
 
-func NewKafkaBroker(kafkaTopics, kafkaBrokers []string, groupId string, offset int64) (*KafkaBroker, error) {
-	config := cluster.NewConfig()
-	config.Consumer.Return.Errors = true
-	config.Group.Return.Notifications = true
-
-	log.INFO.Printf("Connecting to kafka brokers %s topics %s", kafkaBrokers, kafkaTopics)
-	consumer, err := cluster.NewConsumer(kafkaBrokers, groupId, kafkaTopics, config)
-
-	if err != nil {
-		return nil, err
-	}
-
-	saramaConfig := sarama.NewConfig()
-	config.Producer.Partitioner = sarama.NewRoundRobinPartitioner
-	producer, err := sarama.NewAsyncProducer(kafkaBrokers, saramaConfig)
-
-	if err != nil {
-		return nil, err
-	}
-
+func NewKafkaBroker(cnf *config.Config, kafkaBrokers []string) Interface {
 	return &KafkaBroker{
-		consumer:      consumer,
-		stopReceiving: make(chan struct{}),
-		producer:      producer,
-		kafkaBrokers: kafkaBrokers,
-		kafkaTopics: kafkaTopics,
-		groupId: groupId,
-		offset: offset,
-	}, nil
+		Broker:         New(cnf),
+		KafkaConnector: common.KafkaConnector{},
+		kafkaBrokers:   kafkaBrokers,
+	}
 }
 
-func (broker KafkaBroker) StartConsuming(consumerTag string, taskProcessor TaskProcessor) (bool, error) {
-	broker.startConsuming(consumerTag, taskProcessor)
-	deliveries := make(chan []byte)
+func (b *KafkaBroker) StartConsuming(consumerTag string, taskProcessor TaskProcessor) (bool, error) {
+	b.startConsuming(consumerTag, taskProcessor)
+	consumer, err := b.CreateConsumer(
+		b.kafkaBrokers,
+		consumerTag,
+		b.cnf.Kafka.TopicList,
+		b.cnf.Kafka.Offset,
+	)
+	if err != nil {
+		b.retryFunc(b.retryStopChan)
+		return b.retry, err
+	}
+	defer b.CloseConsumer(consumer)
 
-	go func() {
-		for {
-			select {
-			case err := <-broker.consumer.Errors():
-				log.ERROR.Printf("Consumer error: ", err)
-			case <-broker.stopReceiving:
-				return
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case err := <-broker.producer.Errors():
-				log.ERROR.Printf("Producer error: ", err)
-			case <-broker.stopReceiving:
-				return
-
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case note := <-broker.consumer.Notifications():
-				log.WARNING.Printf("Rebalanced: %+v\n", note)
-			case <-broker.stopReceiving:
-				return
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case msg := <-broker.consumer.Messages():
-				log.INFO.Print(msg)
-				deliveries <- msg.Value
-			case broker.stopReceiving:
-				return
-			}
-		}
-	}()
-
-	if err := broker.consume(deliveries, taskProcessor); err != nil {
-		return broker.retry, err
+	if err := b.consume(consumer.Messages(), taskProcessor); err != nil {
+		return b.retry, err
 	}
 
-	return false, nil
+	return b.retry, nil
 }
 
 func (broker *KafkaBroker) StopConsuming() {
@@ -171,7 +109,7 @@ func (broker *KafkaBroker) GetPendingTasks(queue string) ([]*tasks.Signature, er
 	var messages [][]byte
 	queueLen := len(consumer.Messages())
 	for i := 0; i < queueLen; i++ {
-		msg := <- consumer.Messages()
+		msg := <-consumer.Messages()
 		messages = append(messages, msg.Value)
 	}
 
@@ -187,7 +125,7 @@ func (broker *KafkaBroker) GetPendingTasks(queue string) ([]*tasks.Signature, er
 	return taskSignatures, nil
 }
 
-func (broker *KafkaBroker) consume(deliveries <-chan []byte, taskProcessor TaskProcessor) error {
+func (broker *KafkaBroker) consume(deliveries <-chan  *sarama.ConsumerMessage, taskProcessor TaskProcessor) error {
 	maxWorkers := broker.cnf.MaxWorkerInstances
 	pool := make(chan struct{}, maxWorkers)
 
