@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/satori/go.uuid"
 	"github.com/vidmed/machinery/v1/backends"
 	"github.com/vidmed/machinery/v1/brokers"
 	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/tasks"
-	"github.com/satori/go.uuid"
 )
 
 // Server is the main Machinery object and stores all configuration
@@ -185,12 +185,15 @@ func (server *Server) SendGroup(group *tasks.Group, sendConcurrency int) ([]*bac
 
 	pool := make(chan struct{}, sendConcurrency)
 	go func() {
-		pool <- struct{}{}
+		for i := 0; i < sendConcurrency; i++ {
+			pool <- struct{}{}
+		}
 	}()
 
 	for i, signature := range group.Tasks {
 
 		if sendConcurrency > 0 {
+			// get worker from pool (blocks until one is available)
 			<-pool
 		}
 
@@ -200,11 +203,14 @@ func (server *Server) SendGroup(group *tasks.Group, sendConcurrency int) ([]*bac
 			// Publish task
 			if err := server.broker.Publish(s); err != nil {
 				errorsChan <- fmt.Errorf("Publish message error: %s", err)
-				pool <- struct{}{}
+				if sendConcurrency > 0 {
+					pool <- struct{}{}
+				}
 				return
 			}
-
-			pool <- struct{}{}
+			if sendConcurrency > 0 {
+				pool <- struct{}{}
+			}
 
 			asyncResults[index] = backends.NewAsyncResult(s, server.backend)
 		}(signature, i)
