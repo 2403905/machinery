@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/garyburd/redigo/redis"
 	"github.com/vidmed/machinery/v1/common"
 	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/log"
 	"github.com/vidmed/machinery/v1/tasks"
-	"github.com/garyburd/redigo/redis"
 	"gopkg.in/redsync.v1"
 )
 
@@ -254,6 +254,7 @@ func (b *RedisBroker) consumeOne(delivery []byte, taskProcessor TaskProcessor) e
 		conn := b.open()
 		defer conn.Close()
 
+		log.ERROR.Printf("Task %q is not registered. Requeue", sig.Name)
 		conn.Do("RPUSH", b.cnf.DefaultQueue, delivery)
 		return nil
 	}

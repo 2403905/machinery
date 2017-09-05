@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/streadway/amqp"
 	"github.com/vidmed/machinery/v1/common"
 	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/log"
 	"github.com/vidmed/machinery/v1/tasks"
-	"github.com/streadway/amqp"
 )
 
 // AMQPBroker represents an AMQP broker
@@ -217,6 +217,7 @@ func (b *AMQPBroker) consumeOne(d amqp.Delivery, taskProcessor TaskProcessor) er
 	// If the task is not registered, we nack it and requeue,
 	// there might be different workers for processing specific tasks
 	if !b.IsTaskRegistered(signature.Name) {
+		log.ERROR.Printf("Task %q is not registered. Requeue", signature.Name)
 		d.Nack(false, true) // multiple, requeue
 		return nil
 	}
