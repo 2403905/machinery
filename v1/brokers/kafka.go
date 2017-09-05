@@ -2,6 +2,7 @@ package brokers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/RichardKnop/machinery/v1/common"
 	"github.com/RichardKnop/machinery/v1/config"
@@ -21,21 +22,33 @@ var (
 type KafkaBroker struct {
 	Broker
 	common.KafkaConnector
-	kafkaBrokers []string
+	servers []string
 }
 
-func NewKafkaBroker(cnf *config.Config, kafkaBrokers []string) Interface {
+func NewKafkaBroker(cnf *config.Config, servers []string) Interface {
 	return &KafkaBroker{
 		Broker:         New(cnf),
 		KafkaConnector: common.KafkaConnector{},
-		kafkaBrokers:   kafkaBrokers,
+		servers:        servers,
 	}
 }
 
-func (b *KafkaBroker) StartConsuming(consumerTag string, taskProcessor TaskProcessor) (bool, error) {
+var con *cluster.Consumer
+
+func (b *KafkaBroker) getConsumer(){
+	if con == nil {
+
+	}
+	return con
+}
+
+// StartConsuming enters a loop and waits for incoming messages
+func (b *KafkaBroker) StartConsuming(consumerTag string, concurrency int, taskProcessor TaskProcessor) (bool, error) {
 	b.startConsuming(consumerTag, taskProcessor)
-	consumer, err := b.CreateConsumer(
-		b.kafkaBrokers,
+
+	var err error
+	b.consumer, err = b.CreateConsumer(
+		b.servers,
 		consumerTag,
 		b.cnf.Kafka.TopicList,
 		b.cnf.Kafka.Offset,
@@ -44,22 +57,32 @@ func (b *KafkaBroker) StartConsuming(consumerTag string, taskProcessor TaskProce
 		b.retryFunc(b.retryStopChan)
 		return b.retry, err
 	}
-	defer b.CloseConsumer(consumer)
+	defer b.CloseConsumer(b.consumer)
 
-	if err := b.consume(consumer.Messages(), taskProcessor); err != nil {
+	go func() { // subscribe on errors chanel
+		for err := range b.consumer.Errors() {
+			log.ERROR.Printf("Error: %s\n", err.Error())
+		}
+	}()
+
+	go func() { // subscribe on notifications chanel
+		for note := range b.consumer.Notifications() {
+			log.WARNING.Printf("Rebalanced: %+v\n", note)
+		}
+	}()
+
+	log.INFO.Print("[*] Waiting for messages. To exit press CTRL+C")
+
+	if err := b.consume(b.consumer.Messages(), concurrency, taskProcessor); err != nil {
 		return b.retry, err
 	}
 
 	return b.retry, nil
 }
 
-func (broker *KafkaBroker) StopConsuming() {
-	if err := broker.consumer.Close(); err != nil {
-		log.ERROR.Print(err)
-	}
-
-	broker.Broker.stopConsuming()
-
+// StopConsuming quits the loop
+func (b *KafkaBroker) StopConsuming() {
+	b.stopConsuming()
 }
 
 func (broker *KafkaBroker) Publish(signature *tasks.Signature) error {
@@ -125,18 +148,20 @@ func (broker *KafkaBroker) GetPendingTasks(queue string) ([]*tasks.Signature, er
 	return taskSignatures, nil
 }
 
-func (broker *KafkaBroker) consume(deliveries <-chan  *sarama.ConsumerMessage, taskProcessor TaskProcessor) error {
-	maxWorkers := broker.cnf.MaxWorkerInstances
-	pool := make(chan struct{}, maxWorkers)
+// consume takes delivered messages from the channel and manages a worker pool
+// to process tasks concurrently
+func (b *KafkaBroker) consume(deliveries <-chan *sarama.ConsumerMessage, concurrency int, taskProcessor TaskProcessor) error {
+	pool := make(chan struct{}, concurrency)
 
-	// initialize worker pool with maxWorkers workers
+	// initialize worker pool with "concurrency" number workers
 	go func() {
-		for i := 0; i < maxWorkers; i++ {
+		for i := 0; i < concurrency; i++ {
 			pool <- struct{}{}
 		}
 	}()
 
 	errorsChan := make(chan error)
+	// Use wait group to make sure task processing completes on interrupt signal
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
@@ -145,7 +170,7 @@ func (broker *KafkaBroker) consume(deliveries <-chan  *sarama.ConsumerMessage, t
 		case err := <-errorsChan:
 			return err
 		case d := <-deliveries:
-			if maxWorkers != 0 {
+			if concurrency != 0 {
 				// get worker from pool (blocks until one is available)
 				<-pool
 			}
@@ -157,16 +182,16 @@ func (broker *KafkaBroker) consume(deliveries <-chan  *sarama.ConsumerMessage, t
 			go func() {
 				defer wg.Done()
 
-				if err := broker.consumeOne(d, taskProcessor); err != nil {
+				if err := b.consumeOne(d, taskProcessor); err != nil {
 					errorsChan <- err
 				}
 
-				if maxWorkers != 0 {
+				if concurrency > 0 {
 					// give worker back to pool
 					pool <- struct{}{}
 				}
 			}()
-		case <-broker.Broker.stopChan:
+		case <-b.stopChan:
 			return nil
 		}
 	}
@@ -175,20 +200,30 @@ func (broker *KafkaBroker) consume(deliveries <-chan  *sarama.ConsumerMessage, t
 }
 
 // consumeOne processes a single message using TaskProcessor
-func (broker *KafkaBroker) consumeOne(delivery []byte, taskProcessor TaskProcessor) error {
-	log.INFO.Printf("Received new message: %s", delivery)
+func (b *KafkaBroker) consumeOne(d *sarama.ConsumerMessage, taskProcessor TaskProcessor) error {
+	defer func() {
+		b.consumer.MarkOffset(d, "")
+		err := b.consumer.CommitOffsets() // manually commits marked offsets after handling message
+		if err != nil {
+			log.ERROR.Printf("ERROR while committing offset into kafka - %s", err)
+		}
+	}()
 
+	if len(d.Value) == 0 {
+		return errors.New("Received an empty message")
+	}
+
+	log.INFO.Printf("Received new message: %s", d.Value)
+
+	// Unmarshal message body into signature struct
 	signature := new(tasks.Signature)
-	if err := json.Unmarshal(delivery, signature); err != nil {
+	if err := json.Unmarshal(d.Value, signature); err != nil {
 		return err
 	}
 
-	// If the task is not registered, we requeue it,
+	// If the task is not registered, we ack it and requeue,
 	// there might be different workers for processing specific tasks
-	if !broker.IsTaskRegistered(signature.Name) {
-		message := &sarama.ProducerMessage{Topic: broker.cnf.DefaultQueue, Value: sarama.ByteEncoder(delivery)}
-		broker.producer.Input() <- message
-
+	if !b.IsTaskRegistered(signature.Name) {
 		return nil
 	}
 
