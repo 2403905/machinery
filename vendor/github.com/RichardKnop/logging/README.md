@@ -9,7 +9,7 @@ A simple leveled logging library with coloured output.
 [![Codeship Status for RichardKnop/logging](https://app.codeship.com/projects/3844b520-3c97-0134-92d6-6a89aa757e0d/status?branch=master)](https://app.codeship.com/projects/166987)
 
 [![Sourcegraph for RichardKnop/logging](https://sourcegraph.com/github.com/RichardKnop/logging/-/badge.svg)](https://sourcegraph.com/github.com/RichardKnop/logging?badge)
-[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-orange.svg)](https://richardknop.github.io/donate/)
+[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-orange.svg)](https://vidmed.github.io/donate/)
 
 ---
 

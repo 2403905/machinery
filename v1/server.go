@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/RichardKnop/machinery/v1/backends"
-	"github.com/RichardKnop/machinery/v1/brokers"
-	"github.com/RichardKnop/machinery/v1/config"
-	"github.com/RichardKnop/machinery/v1/tasks"
+	"github.com/vidmed/machinery/v1/backends"
+	"github.com/vidmed/machinery/v1/brokers"
+	"github.com/vidmed/machinery/v1/config"
+	"github.com/vidmed/machinery/v1/tasks"
 	"github.com/satori/go.uuid"
 )
 
