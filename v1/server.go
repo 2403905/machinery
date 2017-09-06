@@ -191,7 +191,6 @@ func (server *Server) SendGroup(group *tasks.Group, sendConcurrency int) ([]*bac
 	}()
 
 	for i, signature := range group.Tasks {
-
 		if sendConcurrency > 0 {
 			// get worker from pool (blocks until one is available)
 			<-pool
@@ -201,15 +200,16 @@ func (server *Server) SendGroup(group *tasks.Group, sendConcurrency int) ([]*bac
 			defer wg.Done()
 
 			// Publish task
-			if err := server.broker.Publish(s); err != nil {
-				errorsChan <- fmt.Errorf("Publish message error: %s", err)
-				if sendConcurrency > 0 {
-					pool <- struct{}{}
-				}
-				return
-			}
+			err := server.broker.Publish(s)
+
+			//return worker back to the pool
 			if sendConcurrency > 0 {
 				pool <- struct{}{}
+			}
+
+			if err != nil {
+				errorsChan <- fmt.Errorf("Publish message error: %s", err)
+				return
 			}
 
 			asyncResults[index] = backends.NewAsyncResult(s, server.backend)
