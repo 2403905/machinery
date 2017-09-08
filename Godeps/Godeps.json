@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/RichardKnop/machinery",
+	"ImportPath": "github.com/vidmed/machinery",
 	"GoVersion": "go1.8",
 	"GodepVersion": "v79",
 	"Packages": [
@@ -7,7 +7,7 @@
 	],
 	"Deps": [
 		{
-			"ImportPath": "github.com/RichardKnop/logging",
+			"ImportPath": "github.com/vidmed/logging",
 			"Rev": "0745ebe7cc826d7d0453c7c9f08ea75a7fe86f7b"
 		},
 		{

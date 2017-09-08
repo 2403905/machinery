@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/RichardKnop/machinery/v1/common"
-	"github.com/RichardKnop/machinery/v1/config"
-	"github.com/RichardKnop/machinery/v1/log"
-	"github.com/RichardKnop/machinery/v1/tasks"
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
 	"github.com/satori/go.uuid"
+	"github.com/vidmed/machinery/v1/common"
+	"github.com/vidmed/machinery/v1/config"
+	"github.com/vidmed/machinery/v1/log"
+	"github.com/vidmed/machinery/v1/tasks"
 	"sync"
 	"time"
 )
@@ -22,7 +22,9 @@ var (
 type KafkaBroker struct {
 	Broker
 	common.KafkaConnector
-	servers []string
+	servers  []string
+	consumer *cluster.Consumer
+	producer sarama.AsyncProducer
 }
 
 func NewKafkaBroker(cnf *config.Config, servers []string) Interface {
@@ -30,16 +32,9 @@ func NewKafkaBroker(cnf *config.Config, servers []string) Interface {
 		Broker:         New(cnf),
 		KafkaConnector: common.KafkaConnector{},
 		servers:        servers,
+		consumer:       nil,
+		producer:       nil,
 	}
-}
-
-var con *cluster.Consumer
-
-func (b *KafkaBroker) getConsumer(){
-	if con == nil {
-
-	}
-	return con
 }
 
 // StartConsuming enters a loop and waits for incoming messages

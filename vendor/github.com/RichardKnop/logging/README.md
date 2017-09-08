@@ -2,14 +2,14 @@
 
 A simple leveled logging library with coloured output.
 
-[![Travis Status for RichardKnop/logging](https://travis-ci.org/RichardKnop/logging.svg?branch=master&label=linux+build)](https://travis-ci.org/RichardKnop/logging)
-[![godoc for RichardKnop/logging](https://godoc.org/github.com/nathany/looper?status.svg)](http://godoc.org/github.com/RichardKnop/logging)
-[![goreportcard for RichardKnop/logging](https://goreportcard.com/badge/github.com/RichardKnop/logging)](https://goreportcard.com/report/RichardKnop/logging)
-[![codecov for RichardKnop/logging](https://codecov.io/gh/RichardKnop/logging/branch/master/graph/badge.svg)](https://codecov.io/gh/RichardKnop/logging)
-[![Codeship Status for RichardKnop/logging](https://app.codeship.com/projects/3844b520-3c97-0134-92d6-6a89aa757e0d/status?branch=master)](https://app.codeship.com/projects/166987)
+[![Travis Status for vidmed/logging](https://travis-ci.org/vidmed/logging.svg?branch=master&label=linux+build)](https://travis-ci.org/vidmed/logging)
+[![godoc for vidmed/logging](https://godoc.org/github.com/nathany/looper?status.svg)](http://godoc.org/github.com/vidmed/logging)
+[![goreportcard for vidmed/logging](https://goreportcard.com/badge/github.com/vidmed/logging)](https://goreportcard.com/report/vidmed/logging)
+[![codecov for vidmed/logging](https://codecov.io/gh/vidmed/logging/branch/master/graph/badge.svg)](https://codecov.io/gh/vidmed/logging)
+[![Codeship Status for vidmed/logging](https://app.codeship.com/projects/3844b520-3c97-0134-92d6-6a89aa757e0d/status?branch=master)](https://app.codeship.com/projects/166987)
 
-[![Sourcegraph for RichardKnop/logging](https://sourcegraph.com/github.com/RichardKnop/logging/-/badge.svg)](https://sourcegraph.com/github.com/RichardKnop/logging?badge)
-[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-orange.svg)](https://richardknop.github.io/donate/)
+[![Sourcegraph for vidmed/logging](https://sourcegraph.com/github.com/vidmed/logging/-/badge.svg)](https://sourcegraph.com/github.com/vidmed/logging?badge)
+[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-orange.svg)](https://vidmed.github.io/donate/)
 
 ---
 
@@ -31,7 +31,7 @@ Example usage. Create a new package `log` in your app such that:
 package log
 
 import (
-	"github.com/RichardKnop/logging"
+	"github.com/vidmed/logging"
 )
 
 var (
