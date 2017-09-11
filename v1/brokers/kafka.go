@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/bsm/sarama-cluster"
-	"github.com/satori/go.uuid"
 	"github.com/vidmed/machinery/v1/common"
 	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/log"
 	"github.com/vidmed/machinery/v1/tasks"
 	"sync"
-	"time"
 )
 
 var (
@@ -80,67 +78,44 @@ func (b *KafkaBroker) StopConsuming() {
 	b.stopConsuming()
 }
 
-func (broker *KafkaBroker) Publish(signature *tasks.Signature) error {
-	msg, err := json.Marshal(signature)
+// Publish places a new message on the default queue
+func (b *KafkaBroker) Publish(signature *tasks.Signature) error {
+	b.AdjustRoutingKey(signature)
 
+	// Check the ETA signature field, if it is set and it is in the future,
+	// delay the task
+	//if signature.ETA != nil {
+	//	now := time.Now().UTC()
+	//
+	//	if signature.ETA.After(now) {
+	//		delayMs := int64(signature.ETA.Sub(now) / time.Millisecond)
+	//
+	//		return b.delay(signature, delayMs)
+	//	}
+	//}
+
+	message, err := json.Marshal(signature)
 	if err != nil {
 		return fmt.Errorf("JSON marshal error: %s", err)
 	}
 
-	broker.AdjustRoutingKey(signature)
-
-	// Check the ETA signature field, if it is set and it is in the future,
-	// delay the task
-	// TODO(stgleb): Somehow prioritize tasks according to ETA.
-	if signature.ETA != nil {
-		now := time.Now().UTC()
-
-		if signature.ETA.After(now) {
-			message := &sarama.ProducerMessage{Topic: broker.cnf.DefaultQueue, Value: sarama.ByteEncoder(msg)}
-			broker.producer.Input() <- message
-
-			return err
-		}
+	b.producer, err = b.CreateProducer(b.servers)
+	if err != nil {
+		return err
 	}
+	defer b.CloseProducer(b.producer)
+	// listen errors
+	go func() {
+		for err := range b.producer.Errors() {
+			log.ERROR.Println(err.Error())
+		}
+	}()
 
 	// Send task by signature routing key in order.
-	message := &sarama.ProducerMessage{Topic: signature.RoutingKey, Value: sarama.ByteEncoder(msg)}
-	broker.producer.Input() <- message
+	msg := &sarama.ProducerMessage{Topic: signature.RoutingKey, Value: sarama.ByteEncoder(message)}
+	b.producer.Input() <- msg
 
 	return nil
-}
-
-func (broker *KafkaBroker) GetPendingTasks(queue string) ([]*tasks.Signature, error) {
-	if queue == "" {
-		queue = broker.cnf.DefaultQueue
-	}
-
-	config := cluster.NewConfig()
-	config.Consumer.Return.Errors = true
-	config.Group.Return.Notifications = true
-	consumer, err := cluster.NewConsumer(broker.kafkaBrokers, uuid.NewV4().String(), broker.kafkaTopics, config)
-
-	if err != nil {
-		log.ERROR.Printf("Error while getting pending tasks: %s", err)
-	}
-
-	var messages [][]byte
-	queueLen := len(consumer.Messages())
-	for i := 0; i < queueLen; i++ {
-		msg := <-consumer.Messages()
-		messages = append(messages, msg.Value)
-	}
-
-	taskSignatures := make([]*tasks.Signature, len(messages))
-	for i, result := range messages {
-		sig := new(tasks.Signature)
-		if err := json.Unmarshal(result, sig); err != nil {
-			return nil, err
-		}
-		taskSignatures[i] = sig
-	}
-
-	return taskSignatures, nil
 }
 
 // consume takes delivered messages from the channel and manages a worker pool
@@ -216,9 +191,10 @@ func (b *KafkaBroker) consumeOne(d *sarama.ConsumerMessage, taskProcessor TaskPr
 		return err
 	}
 
-	// If the task is not registered, we ack it and requeue,
+	// If the task is not registered, we DO NOT requeue it,
 	// there might be different workers for processing specific tasks
 	if !b.IsTaskRegistered(signature.Name) {
+		log.ERROR.Printf("Task %q is not registered. Requeue", signature.Name)
 		return nil
 	}
 
