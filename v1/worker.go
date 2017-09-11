@@ -39,6 +39,11 @@ func (worker *Worker) Launch() error {
 		log.INFO.Printf("  - BindingKey: %s", cnf.AMQP.BindingKey)
 		log.INFO.Printf("  - PrefetchCount: %d", cnf.AMQP.PrefetchCount)
 	}
+	if cnf.Kafka != nil {
+		log.INFO.Printf("- Kafka:")
+		log.INFO.Printf("  - TopicList: %s", cnf.Kafka.TopicList)
+		log.INFO.Printf("  - Offset: %s", cnf.Kafka.Offset)
+	}
 
 	errorsChan := make(chan error)
 	sig := make(chan os.Signal, 1)

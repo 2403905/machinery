@@ -1,0 +1,8 @@
+---
+broker: kafka://localhost:9092
+default_queue: machinery_tasks
+result_backend: redis://127.0.0.1:6379
+results_expire_in: 3600000
+kafka:
+  topic_list: [machinery_tasks]
+  offset: oldest

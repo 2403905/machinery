@@ -109,10 +109,14 @@ func (b *KafkaBroker) Publish(signature *tasks.Signature) error {
 		for err := range b.producer.Errors() {
 			log.ERROR.Println(err.Error())
 		}
+		for m := range b.producer.Successes() {
+			log.ERROR.Println(m)
+		}
 	}()
 
+	log.INFO.Println(string(message))
 	// Send task by signature routing key in order.
-	msg := &sarama.ProducerMessage{Topic: signature.RoutingKey, Value: sarama.ByteEncoder(message)}
+	msg := &sarama.ProducerMessage{Topic: b.cnf.DefaultQueue, Value: sarama.ByteEncoder(message)}
 	b.producer.Input() <- msg
 
 	return nil
