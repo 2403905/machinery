@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/garyburd/redigo/redis"
 	"github.com/vidmed/machinery/v1/common"
 	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/log"
 	"github.com/vidmed/machinery/v1/tasks"
-	"github.com/garyburd/redigo/redis"
 	"gopkg.in/redsync.v1"
+	"sync"
 )
 
 // RedisBackend represents a Memcache result backend
 type RedisBackend struct {
+	mx       sync.Mutex
 	cnf      *config.Config
 	host     string
 	password string
@@ -307,6 +309,8 @@ func (b *RedisBackend) setExpirationTime(key string) error {
 
 // open returns or creates instance of Redis connection
 func (b *RedisBackend) open() redis.Conn {
+	b.mx.Lock()
+	defer b.mx.Unlock()
 	if b.pool == nil {
 		b.pool = b.NewPool(b.socketPath, b.host, b.password, b.db)
 	}

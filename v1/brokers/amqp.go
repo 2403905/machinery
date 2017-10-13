@@ -44,7 +44,7 @@ func (b *AMQPBroker) StartConsuming(consumerTag string, concurrency int, taskPro
 	)
 	if err != nil {
 		b.retryFunc(b.retryStopChan)
-		return b.retry, err
+		return b.retry.Get(), err
 	}
 	defer b.Close(channel, conn)
 
@@ -53,7 +53,7 @@ func (b *AMQPBroker) StartConsuming(consumerTag string, concurrency int, taskPro
 		0,     // prefetch size
 		false, // global
 	); err != nil {
-		return b.retry, fmt.Errorf("Channel qos error: %s", err)
+		return b.retry.Get(), fmt.Errorf("Channel qos error: %s", err)
 	}
 
 	deliveries, err := channel.Consume(
@@ -66,16 +66,16 @@ func (b *AMQPBroker) StartConsuming(consumerTag string, concurrency int, taskPro
 		nil,         // arguments
 	)
 	if err != nil {
-		return b.retry, fmt.Errorf("Queue consume error: %s", err)
+		return b.retry.Get(), fmt.Errorf("Queue consume error: %s", err)
 	}
 
 	log.INFO.Print("[*] Waiting for messages. To exit press CTRL+C")
 
 	if err := b.consume(deliveries, concurrency, taskProcessor, amqpCloseChan); err != nil {
-		return b.retry, err
+		return b.retry.Get(), err
 	}
 
-	return b.retry, nil
+	return b.retry.Get(), nil
 }
 
 // StopConsuming quits the loop

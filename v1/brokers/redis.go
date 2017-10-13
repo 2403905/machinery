@@ -57,7 +57,7 @@ func (b *RedisBroker) StartConsuming(consumerTag string, concurrency int, taskPr
 	_, err := conn.Do("PING")
 	if err != nil {
 		b.retryFunc(b.retryStopChan)
-		return b.retry, err
+		return b.retry.Get(), err
 	}
 
 	// Channels and wait groups used to properly close down goroutines
@@ -115,10 +115,10 @@ func (b *RedisBroker) StartConsuming(consumerTag string, concurrency int, taskPr
 	}()
 
 	if err := b.consume(deliveries, concurrency, taskProcessor); err != nil {
-		return b.retry, err
+		return b.retry.Get(), err
 	}
 
-	return b.retry, nil
+	return b.retry.Get(), nil
 }
 
 // StopConsuming quits the loop
