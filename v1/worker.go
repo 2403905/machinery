@@ -49,7 +49,7 @@ func (worker *Worker) Launch() error {
 			retry, err := broker.StartConsuming(worker.ConsumerTag, worker.Concurrency, worker)
 
 			if retry {
-				log.WARNING.Printf("Start consuming error: %s", err)
+				log.ERROR.Printf("Start consuming error: %s", err)
 			} else {
 				errorsChan <- err // stop the goroutine
 				return

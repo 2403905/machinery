@@ -158,13 +158,20 @@ func (b *AMQPBroker) consume(deliveries <-chan amqp.Delivery, concurrency int, t
 		}
 	}()
 
-	errorsChan := make(chan error)
+	errorsChan := make(chan error, 1)
 
 	// Use wait group to make sure task processing completes on interrupt signal
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
 	for {
+		// try to read errorsChan as earlier as possible
+		select {
+		case err := <-errorsChan:
+			return err
+		default:
+		}
+
 		select {
 		case amqpErr := <-amqpCloseChan:
 			return amqpErr
@@ -175,7 +182,6 @@ func (b *AMQPBroker) consume(deliveries <-chan amqp.Delivery, concurrency int, t
 				// get worker from pool (blocks until one is available)
 				<-pool
 			}
-
 			wg.Add(1)
 
 			// Consume the task inside a gotourine so multiple tasks
@@ -184,7 +190,10 @@ func (b *AMQPBroker) consume(deliveries <-chan amqp.Delivery, concurrency int, t
 				defer wg.Done()
 
 				if err := b.consumeOne(d, taskProcessor); err != nil {
-					errorsChan <- err
+					select {
+					case errorsChan <- err:
+					default:
+					}
 				}
 
 				if concurrency > 0 {
