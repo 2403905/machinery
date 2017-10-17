@@ -159,6 +159,7 @@ func (b *AMQPBroker) consume(deliveries <-chan amqp.Delivery, concurrency int, t
 	}()
 
 	errorsChan := make(chan error, 1)
+	doNotWait := make(chan struct{}, 1)
 
 	// Use wait group to make sure task processing completes on interrupt signal
 	var wg sync.WaitGroup
@@ -180,7 +181,12 @@ func (b *AMQPBroker) consume(deliveries <-chan amqp.Delivery, concurrency int, t
 		case d := <-deliveries:
 			if concurrency > 0 {
 				// get worker from pool (blocks until one is available)
-				<-pool
+				// if we got an error we should not run the worker and quiet
+				select {
+				case <-pool:
+				case <-doNotWait:
+					continue
+				}
 			}
 			wg.Add(1)
 
@@ -192,6 +198,12 @@ func (b *AMQPBroker) consume(deliveries <-chan amqp.Delivery, concurrency int, t
 				if err := b.consumeOne(d, taskProcessor); err != nil {
 					select {
 					case errorsChan <- err:
+						// non-blocking write to doNotWait channel
+						// to tell not to run worker
+						select {
+						case doNotWait <- struct{}{}:
+						default:
+						}
 					default:
 					}
 				}
