@@ -37,7 +37,7 @@ type Signature struct {
 // NewSignature creates a new task signature
 func NewSignature(name string, args []Arg) *Signature {
 	return &Signature{
-		UUID: fmt.Sprintf("task_%v", uuid.NewV4()),
+		UUID: fmt.Sprintf("task_%v", uuid.Must(uuid.NewV4())),
 		Name: name,
 		Args: args,
 	}
