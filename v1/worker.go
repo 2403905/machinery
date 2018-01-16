@@ -1,13 +1,12 @@
 package machinery
 
 import (
+	"errors"
 	"fmt"
-	"strings"
-	"time"
-
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/vidmed/machinery/v1/backends"
 	"github.com/vidmed/machinery/v1/log"
@@ -25,9 +24,19 @@ type Worker struct {
 // Launch starts a new worker process. The worker subscribes
 // to the default queue and processes incoming registered tasks
 func (worker *Worker) Launch() error {
+	errorsChan := make(chan error)
+
+	worker.LaunchAsync(errorsChan)
+
+	return <-errorsChan
+}
+
+// LaunchAsync is a non blocking version of Launch
+func (worker *Worker) LaunchAsync(errorsChan chan<- error) {
 	cnf := worker.server.GetConfig()
 	broker := worker.server.GetBroker()
 
+	// Log some useful information about woorker configuration
 	log.INFO.Printf("Launching a worker with the following settings:")
 	log.INFO.Printf("- Broker: %s", cnf.Broker)
 	log.INFO.Printf("- DefaultQueue: %s", cnf.DefaultQueue)
@@ -40,16 +49,13 @@ func (worker *Worker) Launch() error {
 		log.INFO.Printf("  - PrefetchCount: %d", cnf.AMQP.PrefetchCount)
 	}
 
-	errorsChan := make(chan error)
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-
+	// Goroutine to start broker consumption and handle retries when broker connection dies
 	go func() {
 		for {
 			retry, err := broker.StartConsuming(worker.ConsumerTag, worker.Concurrency, worker)
 
 			if retry {
-				log.ERROR.Printf("Start consuming error: %s", err)
+				log.WARNING.Printf("Broker failed with error: %s", err)
 			} else {
 				errorsChan <- err // stop the goroutine
 				return
@@ -57,14 +63,32 @@ func (worker *Worker) Launch() error {
 		}
 	}()
 
-	go func() {
-		err := fmt.Errorf("Signal received: %v. Quitting the worker", <-sig)
-		log.WARNING.Print(err.Error())
-		worker.Quit()
-		errorsChan <- err
-	}()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	var signalsReceived uint
 
-	return <-errorsChan
+	// Goroutine Handle SIGINT and SIGTERM signals
+	go func() {
+		for {
+			select {
+			case s := <-sig:
+				log.WARNING.Printf("Signal received: %v", s)
+				signalsReceived++
+
+				if signalsReceived < 2 {
+					// After first Ctrl+C start quitting the worker gracefully
+					log.WARNING.Print("Waiting for running tasks to finish before shutting down")
+					go func() {
+						worker.Quit()
+						errorsChan <- errors.New("Worker quit gracefully")
+					}()
+				} else {
+					// Abort the program when user hits Ctrl+C second time in a row
+					errorsChan <- errors.New("Worker quit abruptly")
+				}
+			}
+		}
+	}()
 }
 
 // Quit tears down the running worker process
@@ -150,11 +174,15 @@ func (worker *Worker) taskSucceeded(signature *tasks.Signature, taskResults []*t
 		return fmt.Errorf("Set state success error: %s", err)
 	}
 
-	debugResults := make([]string, len(taskResults))
-	for i, taskResult := range taskResults {
-		debugResults[i] = fmt.Sprintf("%v", taskResult.Value)
+	// Log human readable results of the processed task
+	var debugResults = "[]"
+	results, err := tasks.ReflectTaskResults(taskResults)
+	if err != nil {
+		log.WARNING.Print(err)
+	} else {
+		debugResults = tasks.HumanReadableResults(results)
 	}
-	log.INFO.Printf("Processed task %s. Results = [%v]", signature.UUID, strings.Join(debugResults, ", "))
+	log.INFO.Printf("Processed task %s. Results = %s", signature.UUID, debugResults)
 
 	// Trigger success callbacks
 
@@ -162,10 +190,10 @@ func (worker *Worker) taskSucceeded(signature *tasks.Signature, taskResults []*t
 		if signature.Immutable == false {
 			// Pass results of the task to success callbacks
 			for _, taskResult := range taskResults {
-				successTask.Args = append([]tasks.Arg{{
+				successTask.Args = append(successTask.Args, tasks.Arg{
 					Type:  taskResult.Type,
 					Value: taskResult.Value,
-				}}, successTask.Args...)
+				})
 			}
 		}
 

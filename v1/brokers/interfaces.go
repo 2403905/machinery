@@ -1,11 +1,13 @@
 package brokers
 
 import (
+	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/tasks"
 )
 
 // Interface - a common interface for all brokers
 type Interface interface {
+	GetConfig() *config.Config
 	SetRegisteredTaskNames(names []string)
 	IsTaskRegistered(name string) bool
 	StartConsuming(consumerTag string, concurrency int, p TaskProcessor) (bool, error)

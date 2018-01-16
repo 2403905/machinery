@@ -1,18 +1,18 @@
-[1]: https://raw.githubusercontent.com/vidmed/assets/master/machinery/example_worker.png
-[2]: https://raw.githubusercontent.com/vidmed/assets/master/machinery/example_worker_receives_tasks.png
+[1]: https://raw.githubusercontent.com/RichardKnop/assets/master/machinery/example_worker.png
+[2]: https://raw.githubusercontent.com/RichardKnop/assets/master/machinery/example_worker_receives_tasks.png
+[3]: http://patreon_public_assets.s3.amazonaws.com/sized/becomeAPatronBanner.png
+[4]: http://richardknop.com/images/btcaddress.png
 
 ## Machinery
 
 Machinery is an asynchronous task queue/job queue based on distributed message passing.
 
-[![Travis Status for vidmed/machinery](https://travis-ci.org/vidmed/machinery.svg?branch=master&label=linux+build)](https://travis-ci.org/vidmed/machinery)
-[![godoc for vidmed/machinery](https://godoc.org/github.com/nathany/looper?status.svg)](http://godoc.org/github.com/vidmed/machinery/v1)
-[![goreportcard for vidmed/machinery](https://goreportcard.com/badge/github.com/vidmed/machinery)](https://goreportcard.com/report/vidmed/machinery)
-[![codecov for vidmed/machinery](https://codecov.io/gh/vidmed/machinery/branch/master/graph/badge.svg)](https://codecov.io/gh/vidmed/machinery)
-[![Codeship Status for vidmed/machinery](https://app.codeship.com/projects/35dc5880-71a7-0133-ec05-06b1c29ec1d7/status?branch=master)](https://app.codeship.com/projects/116961)
+[![Travis Status for RichardKnop/machinery](https://travis-ci.org/RichardKnop/machinery.svg?branch=master&label=linux+build)](https://travis-ci.org/RichardKnop/machinery)
+[![godoc for RichardKnop/machinery](https://godoc.org/github.com/nathany/looper?status.svg)](http://godoc.org/github.com/RichardKnop/machinery/v1)
+[![codecov for RichardKnop/machinery](https://codecov.io/gh/RichardKnop/machinery/branch/master/graph/badge.svg)](https://codecov.io/gh/RichardKnop/machinery)
 
-[![Sourcegraph for vidmed/machinery](https://sourcegraph.com/github.com/vidmed/machinery/-/badge.svg)](https://sourcegraph.com/github.com/vidmed/machinery?badge)
-[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-orange.svg)](https://vidmed.github.io/donate/)
+[![Sourcegraph for RichardKnop/machinery](https://sourcegraph.com/github.com/RichardKnop/machinery/-/badge.svg)](https://sourcegraph.com/github.com/RichardKnop/machinery?badge)
+[![Donate Bitcoin](https://img.shields.io/badge/donate-bitcoin-orange.svg)](https://richardknop.github.io/donate/)
 
 ---
 
@@ -38,13 +38,14 @@ Machinery is an asynchronous task queue/job queue based on distributed message p
   * [Requirements](#requirements)
   * [Dependencies](#dependencies)
   * [Testing](#testing)
+* [Supporting the project](#supporting-the-project)
 
 ### First Steps
 
 Add the Machinery library to your $GOPATH/src:
 
 ```sh
-go get github.com/vidmed/machinery/v1
+go get github.com/RichardKnop/machinery/v1
 ```
 
 First, you will need to define some tasks. Look at sample tasks in `example/tasks/tasks.go` to see a few examples.
@@ -72,16 +73,16 @@ You will be able to see the tasks being processed asynchronously by the worker:
 The [config](/v1/config/config.go) package has convenience methods for loading configuration from environment variables or a YAML file. For example, load configuration from environment variables:
 
 ```go
-cnf := config.NewFromEnvironment(true, true)
+cnf, err := config.NewFromEnvironment(true)
 ```
 
 Or load from YAML file:
 
 ```go
-cnf := config.NewFromFile("config.yml", true, true)
+cnf := config.NewFromFile("config.yml", true)
 ```
 
-The first boolean flag signals whether configuration must be loaded successfully at least one time. Second flag enables live reloading of configuration every 10 seconds.
+Second boolean flag enables live reloading of configuration every 10 seconds. Use `false` to disable live reloading.
 
 Machinery configuration is encapsulated by a `Config` struct and injected as a dependency to objects that need it.
 
@@ -114,6 +115,17 @@ For example:
 
 1. `redis://127.0.0.1:6379`, or with password `redis://password@127.0.0.1:6379`
 2. `redis+socket://password@/path/to/file.sock:/0`
+
+##### AWS SQS
+
+Use AWS SQS URL in the format:
+
+```
+https://sqs.us-east-2.amazonaws.com/123456789012
+```
+
+See [AWS SQS docs](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html) for more information.
+Also, configuring `AWS_REGION` is required, or an error would be thrown.
 
 #### DefaultQueue
 
@@ -164,7 +176,7 @@ For example:
 
 1. `amqp://guest:guest@localhost:5672`
 
-> Keep in mind AMQP is not recommended as a result backend. See [Keeping Results](https://github.com/vidmed/machinery#keeping-results)
+> Keep in mind AMQP is not recommended as a result backend. See [Keeping Results](https://github.com/RichardKnop/machinery#keeping-results)
 
 ##### MongoDB
 
@@ -179,6 +191,7 @@ For example:
 1. `mongodb://127.0.0.1:27017/taskresults`
 
 See [MongoDB docs](https://docs.mongodb.org/manual/reference/connection-string/) for more information.
+
 
 #### ResultsExpireIn
 
@@ -214,7 +227,7 @@ type Interface interface {
 }
 ```
 
-Then just set the logger in your setup code by calling `Set` function exported by `github.com/vidmed/machinery/v1/log` package:
+Then just set the logger in your setup code by calling `Set` function exported by `github.com/RichardKnop/machinery/v1/log` package:
 
 ```go
 log.Set(myCustomLogger)
@@ -226,8 +239,8 @@ A Machinery library must be instantiated before use. The way this is done is by 
 
 ```go
 import (
-  "github.com/vidmed/machinery/v1/config"
-  "github.com/vidmed/machinery/v1"
+  "github.com/RichardKnop/machinery/v1/config"
+  "github.com/RichardKnop/machinery/v1"
 )
 
 var cnf = &config.Config{
@@ -440,7 +453,7 @@ Tasks can be called by passing an instance of `Signature` to an `Server` instanc
 
 ```go
 import (
-  "github.com/vidmed/machinery/v1/tasks"
+  "github.com/RichardKnop/machinery/v1/tasks"
 )
 
 signature := &tasks.Signature{
@@ -537,7 +550,7 @@ type TaskState struct {
 type GroupMeta struct {
   GroupUUID      string   `bson:"_id"`
   TaskUUIDs      []string `bson:"task_uuids"`
-  ChordTriggered bool     `bson:"chord_trigerred"`
+  ChordTriggered bool     `bson:"chord_triggered"`
   Lock           bool     `bson:"lock"`
 }
 ```
@@ -587,8 +600,8 @@ Running a single asynchronous task is fine but often you will want to design a w
 
 ```go
 import (
-  "github.com/vidmed/machinery/v1/tasks"
-  "github.com/vidmed/machinery/v1"
+  "github.com/RichardKnop/machinery/v1/tasks"
+  "github.com/RichardKnop/machinery/v1"
 )
 
 signature1 := tasks.Signature{
@@ -648,8 +661,8 @@ for _, asyncResult := range asyncResults {
 
 ```go
 import (
-  "github.com/vidmed/machinery/v1/tasks"
-  "github.com/vidmed/machinery/v1"
+  "github.com/RichardKnop/machinery/v1/tasks"
+  "github.com/RichardKnop/machinery/v1"
 )
 
 signature1 := tasks.Signature{
@@ -724,8 +737,8 @@ for _, result := range results {
 
 ```go
 import (
-  "github.com/vidmed/machinery/v1/tasks"
-  "github.com/vidmed/machinery/v1"
+  "github.com/RichardKnop/machinery/v1/tasks"
+  "github.com/RichardKnop/machinery/v1"
 )
 
 signature1 := tasks.Signature{
@@ -823,16 +836,10 @@ brew install mongodb
 
 According to [Go 1.5 Vendor experiment](https://docs.google.com/document/d/1Bz5-UB7g2uPBdOx-rw5t9MxJwkfpx90cqG9AFL0JAYo), all dependencies are stored in the vendor directory. This approach is called `vendoring` and is the best practice for Go projects to lock versions of dependencies in order to achieve reproducible builds.
 
-To update dependencies during development:
+This project uses [dep](https://github.com/golang/dep) for dependency management. To update dependencies during development:
 
 ```sh
-make update-deps
-```
-
-To install dependencies:
-
-```sh
-make install-deps
+dep ensure
 ```
 
 #### Testing
@@ -867,3 +874,13 @@ make test
 ```
 
 If the environment variables are not exported, `make test` will only run unit tests.
+
+### Supporting the project
+
+Become a patreon:
+
+[![http://patreon.com/richardknop][3]](http://patreon.com/richardknop)
+
+Or donate BTC to my wallet: `12iFVjQ5n3Qdmiai4Mp9EG93NSvDipyRKV`
+
+![Donate BTC][4]

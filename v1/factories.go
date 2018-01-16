@@ -18,7 +18,7 @@ func BrokerFactory(cnf *config.Config) (brokers.Interface, error) {
 		return brokers.NewAMQPBroker(cnf), nil
 	}
 
-	if strings.HasPrefix(cnf.ResultBackend, "amqps://") {
+	if strings.HasPrefix(cnf.Broker, "amqps://") {
 		return brokers.NewAMQPBroker(cnf), nil
 	}
 
@@ -50,6 +50,10 @@ func BrokerFactory(cnf *config.Config) (brokers.Interface, error) {
 
 	if strings.HasPrefix(cnf.Broker, "eager") {
 		return brokers.NewEagerBroker(), nil
+	}
+
+	if strings.HasPrefix(cnf.Broker, "https://sqs") {
+		return brokers.NewAWSSQSBroker(cnf), nil
 	}
 
 	return nil, fmt.Errorf("Factory failed with broker URL: %v", cnf.Broker)
