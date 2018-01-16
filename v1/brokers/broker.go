@@ -3,7 +3,6 @@ package brokers
 import (
 	"errors"
 
-	"github.com/vidmed/machinery/v1/common"
 	"github.com/vidmed/machinery/v1/config"
 	"github.com/vidmed/machinery/v1/log"
 	"github.com/vidmed/machinery/v1/retry"
@@ -14,7 +13,7 @@ import (
 type Broker struct {
 	cnf                 *config.Config
 	registeredTaskNames []string
-	retry               *common.AtomicBool
+	retry               bool
 	retryFunc           func(chan int)
 	retryStopChan       chan int
 	stopChan            chan int
@@ -22,7 +21,7 @@ type Broker struct {
 
 // New creates new Broker instance
 func New(cnf *config.Config) Broker {
-	return Broker{cnf: cnf, retry: common.NewAtomicBool(true)}
+	return Broker{cnf: cnf, retry: true}
 }
 
 // GetConfig returns config
@@ -70,18 +69,15 @@ func (b *Broker) startConsuming(consumerTag string, taskProcessor TaskProcessor)
 	if b.retryFunc == nil {
 		b.retryFunc = retry.Closure()
 	}
-	if b.stopChan == nil {
-		b.stopChan = make(chan int)
-	}
-	if b.retryStopChan == nil {
-		b.retryStopChan = make(chan int)
-	}
+
+	b.stopChan = make(chan int)
+	b.retryStopChan = make(chan int)
 }
 
 // startConsuming is a common part of StopConsuming
 func (b *Broker) stopConsuming() {
 	// Do not retry from now on
-	b.retry.Set(false)
+	b.retry = false
 	// Stop the retry closure earlier
 	select {
 	case b.retryStopChan <- 1:

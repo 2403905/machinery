@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/RichardKnop/machinery/v1/log"
+	"github.com/vidmed/machinery/v1/log"
 )
 
 // Add ...

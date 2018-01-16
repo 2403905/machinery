@@ -266,7 +266,7 @@ func (b *RedisBroker) consumeOne(delivery []byte, taskProcessor TaskProcessor) e
 		conn := b.open()
 		defer conn.Close()
 
-		log.ERROR.Printf("Task %q is not registered. Requeue", sig.Name)
+		log.ERROR.Printf("Task %q is not registered. Requeue", signature.Name)
 		conn.Do("RPUSH", b.cnf.DefaultQueue, delivery)
 		return nil
 	}
